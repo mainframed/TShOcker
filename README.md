@@ -1,27 +1,27 @@
-                  .-~*~--,.   .-.
-          .-~-. ./OOOOOOOOO\.'OOO`9~~-.
-        .`OOOOOO.OOM.OLSONOOOOO@@OOOOOO\
-       /OOOO@@@OO@@@OO@@@OOO@@@@@@@@OOOO`.
-       |OO@@@WWWW@@@@OOWWW@WWWW@@@@@@@OOOO).
-     .-'OO@@@@WW@@@W@WWWWWWWWOOWW@@@@@OOOOOO}
-    /OOO@@O@@@@W@@@@@OOWWWWWOOWOO@@@OOO@@@OO|
-   lOOO@@@OO@@@WWWWWWW\OWWWO\WWWOOOOOO@@@O.'
-    \OOO@@@OOO@@@@@@OOW\|||||\WWWW@@@@@@@O'.
-     `,OO@@@OOOOOOOOOOWW\|||||\WWWW@@@@@@OOO)
-      \,O@@@@@OOOOOOWWWWW\|||||\WW@@@@@OOOO.'
-        `~c~8~@@@@WWW@@W\|||||||\WOO|\UO-~'
-             (OWWWWWW@/\W\|||||||\WO)
-               `~-~''     \|||\WW=*'
-                         __\|||\
-                         \||||||\
-                          \||||__\
-          TShOcker         \||\
-                            \|\
-                             \|\
-                              \\
-                               \\
-                                \
-                                 \
+                      .-~*~--,.   .-.
+              .-~-. ./OOOOOOOOO\.'OOO`9~~-.
+            .`OOOOOO.OOM.OLSONOOOOO@@OOOOOO\
+           /OOOO@@@OO@@@OO@@@OOO@@@@@@@@OOOO`.
+           |OO@@@WWWW@@@@OOWWW@WWWW@@@@@@@OOOO).
+         .-'OO@@@@WW@@@W@WWWWWWWWOOWW@@@@@OOOOOO}     
+        /OOO@@O@@@@W@@@@@OOWWWWWOOWOO@@@OOO@@@OO|
+       lOOO@@@OO@@@WWWWWWW\OWWWO\WWWOOOOOO@@@O.'
+        \OOO@@@OOO@@@@@@OOW\|||||\WWWW@@@@@@@O'.
+         `,OO@@@OOOOOOOOOOWW\|||||\WWWW@@@@@@OOO)
+          \,O@@@@@OOOOOOWWWWW\|||||\WW@@@@@OOOO.'
+            `~c~8~@@@@WWW@@W\|||||||\WOO|\UO-~'
+                 (OWWWWWW@/\W\|||||||\WO)
+                   `~-~''     \|||\WW=*'
+                             __\|||\
+                             \||||||\
+                              \||||__\
+              TShOcker         \||\
+                                \|\
+                                 \|\
+                                  \\
+                                   \\
+                                    \
+                                     \
 
 TShOcker
 ========
@@ -45,51 +45,41 @@ nc mainframe.ftp.corp.com 31337
 
 Enter command or 'help'> help
 
- Core Commands
- =============
+Core Commands
+=============
 
-   Command           Description
-   -------           -----------
-   help              Help Menu
-   exit              Terminate the session
-   quit              Terminate the session
+* help              Help Menu
+* exit              Terminate the session
+* quit              Terminate the session
 
 
- Filesystem Commands
- ===================
+Filesystem Commands
+===================
 
-   Command           Description
-   -------           -----------
-   cat               Show contents of dataset
-   cp                copies a file to a new file
-   ls                list datasets in HLQ
-   delete            deletes a file
-   del               also deletes a file
-   lsmem             Lists files and members
+* cat               Show contents of dataset
+* cp                copies a file to a new file
+* ls                list datasets in HLQ
+* delete            deletes a file
+* del               also deletes a file
+* lsmem             Lists files and members
                      !!WARNING!! Takes time and IO
 
 
- Networking Commands
- ===================
+Networking Commands
+===================
 
-   Command           Description
-   -------           -----------
-   ipconfig          Display interfaces
-   ifconfig          Display interfaces
+* ipconfig          Display interfaces
+* ifconfig          Display interfaces
 
 
- System Commands
- ===============
+System Commands
+===============
 
-   Command           Description
-   -------           -----------
-   getuid            Get current user name
-   sysinfo           Remote system info (i.e OS)
-   racf              Show password database location
-   execute           Execute a TSO command
-   tso               Execute TSO command (same as execute)
-   unix              UNIX command (i.e ls -al)
-   ftp               Upload a file from the mainframe to
-                     an FTP server. Syntax is:
-                     host/ip user pass filename [binary]
+* getuid            Get current user name
+* sysinfo           Remote system info (i.e OS)
+* racf              Show password database location
+* execute           Execute a TSO command
+* tso               Execute TSO command (same as execute)
+* unix              UNIX command (i.e ls -al)
+* ftp               Upload a file from the mainframe to an FTP server. Syntax: host/ip user pass filename [binary]
 
