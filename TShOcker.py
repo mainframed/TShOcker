@@ -202,6 +202,8 @@ MATT_DAEMON: /* Starts the listener mode */
     END
     terp = Socket('GetHostId')
     parse var terp socket_rc MF_IP .
+    /* LOL we ignore this */
+    MF_IP = '0.0.0.0'
     terp = Socket('Gethostname')
     parse var terp src hostname
     /* setup the socket */
